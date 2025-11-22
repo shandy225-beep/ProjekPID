@@ -1,0 +1,65 @@
+{
+  "timestamp": "2025-11-22 13:24:10.944860",
+  "total_predictions": 40,
+  "years_predicted": [
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "provinces": [
+    "Aceh",
+    "Bengkulu",
+    "Jambi",
+    "Lampung",
+    "Riau",
+    "Sumatera Barat",
+    "Sumatera Selatan",
+    "Sumatera Utara"
+  ],
+  "total_predicted_production": 73267025.23420005,
+  "avg_predicted_production": 1831675.630855001,
+  "predictions_by_province": {
+    "Aceh": {
+      "total_production": 10312757.587898917,
+      "avg_production": 2062551.5175797835,
+      "avg_productivity": 5.942077009239765
+    },
+    "Bengkulu": {
+      "total_production": 3509601.38575159,
+      "avg_production": 701920.277150318,
+      "avg_productivity": 6.279617862240895
+    },
+    "Jambi": {
+      "total_production": 3743389.6460763738,
+      "avg_production": 748677.9292152748,
+      "avg_productivity": 4.967272714983506
+    },
+    "Lampung": {
+      "total_production": 12905388.968810178,
+      "avg_production": 2581077.7937620357,
+      "avg_productivity": 4.978175930668762
+    },
+    "Riau": {
+      "total_production": 3006120.9987881966,
+      "avg_production": 601224.1997576393,
+      "avg_productivity": 4.768918178442644
+    },
+    "Sumatera Barat": {
+      "total_production": 9826907.271007746,
+      "avg_production": 1965381.4542015493,
+      "avg_productivity": 4.881543370043733
+    },
+    "Sumatera Selatan": {
+      "total_production": 14666055.58865035,
+      "avg_production": 2933211.11773007,
+      "avg_productivity": 4.708149281130148
+    },
+    "Sumatera Utara": {
+      "total_production": 15296803.78721669,
+      "avg_production": 3059360.7574433377,
+      "avg_productivity": 4.278715545396871
+    }
+  }
+}

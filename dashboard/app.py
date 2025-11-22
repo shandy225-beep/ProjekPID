@@ -54,14 +54,19 @@ st.markdown("""
 def load_data():
     """Load semua data yang diperlukan"""
     try:
-        # Load transformed data
+        # Load transformed data - try CSV first, then PKL
+        csv_path = Path("data/processed/transformed_data.csv")
         pkl_path = Path("data/processed/transformed_data.pkl")
-        if not pkl_path.exists():
-            st.error(f"❌ File tidak ditemukan: {pkl_path}")
+        
+        if csv_path.exists():
+            df_transformed = pd.read_csv(str(csv_path))
+            st.success(f"✅ Data berhasil dimuat: {df_transformed.shape[0]} baris, {df_transformed.shape[1]} kolom")
+        elif pkl_path.exists():
+            df_transformed = pd.read_pickle(str(pkl_path))
+            st.success(f"✅ Data berhasil dimuat: {df_transformed.shape[0]} baris, {df_transformed.shape[1]} kolom")
+        else:
+            st.error(f"❌ File tidak ditemukan: {csv_path} atau {pkl_path}")
             return None, None, None, None
-            
-        df_transformed = pd.read_pickle(str(pkl_path))
-        st.success(f"✅ Data berhasil dimuat: {df_transformed.shape[0]} baris, {df_transformed.shape[1]} kolom")
         
         # Load predictions if exists
         predictions_path = Path("data/predictions/future_predictions.csv")
@@ -156,7 +161,7 @@ def plot_time_series(df):
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
 
 def plot_correlation_heatmap(df):
@@ -194,7 +199,7 @@ def plot_correlation_heatmap(df):
         xaxis={'side': 'bottom'}
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def plot_scatter_weather(df):
@@ -217,7 +222,7 @@ def plot_scatter_weather(df):
     
     prod_col = 'Produksi_Original' if 'Produksi_Original' in df.columns else 'Produksi'
     
-    # Create scatter plot
+    # Create scatter plot (trendline removed to avoid statsmodels dependency)
     fig = px.scatter(
         df,
         x=weather_var,
@@ -225,13 +230,12 @@ def plot_scatter_weather(df):
         color=color_by,
         title=f'Hubungan {weather_var} dengan Produksi',
         labels={prod_col: 'Produksi (ton)', weather_var: weather_var},
-        trendline="ols",
         opacity=0.6
     )
     
     fig.update_layout(height=500)
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def plot_province_comparison(df):
@@ -275,7 +279,7 @@ def plot_province_comparison(df):
         showlegend=False
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def plot_feature_importance():
@@ -288,7 +292,7 @@ def plot_feature_importance():
     importance_path = Path("models/feature_importance.png")
     
     if importance_path.exists():
-        st.image(str(importance_path), use_container_width=True)
+        st.image(str(importance_path), width='stretch')
     else:
         st.info("Feature importance plot belum tersedia. Jalankan training model terlebih dahulu.")
 
@@ -301,7 +305,7 @@ def plot_prediction_vs_actual():
     plot_path = Path("models/prediction_vs_actual.png")
     
     if plot_path.exists():
-        st.image(str(plot_path), use_container_width=True)
+        st.image(str(plot_path), width='stretch')
     else:
         st.info("Prediction vs Actual plot belum tersedia. Jalankan training model terlebih dahulu.")
 
@@ -349,13 +353,13 @@ def show_model_performance(model_results, metadata):
             if col in df_results.columns:
                 df_results[col] = df_results[col].apply(lambda x: f"{float(x):.4f}" if 'R²' in col else f"{float(x):,.2f}")
         
-        st.dataframe(df_results, use_container_width=True, hide_index=True)
+        st.dataframe(df_results, width='stretch', hide_index=True)
         
         # Model comparison visualization
         st.subheader("Perbandingan Model")
         plot_path = Path("models/model_comparison.png")
         if plot_path.exists():
-            st.image(str(plot_path), use_container_width=True)
+            st.image(str(plot_path), width='stretch')
     else:
         st.info("Hasil evaluasi model belum tersedia. Jalankan training model terlebih dahulu.")
 
@@ -402,7 +406,7 @@ def show_future_predictions(df_predictions):
             )
             
             fig.update_layout(height=500)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         
         # Data table
         st.subheader("Tabel Prediksi")
@@ -411,7 +415,7 @@ def show_future_predictions(df_predictions):
         display_df['Produksi_Prediksi'] = display_df['Produksi_Prediksi'].round(2)
         display_df['Produktivitas_Prediksi'] = display_df['Produktivitas_Prediksi'].round(2)
         
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, width='stretch', hide_index=True)
         
     else:
         st.info("Prediksi belum tersedia. Jalankan script predict.py terlebih dahulu.")
@@ -441,7 +445,7 @@ def plot_geographic_map(df):
         xaxis_tickangle=-45
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def main():
