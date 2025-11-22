@@ -1,0 +1,32 @@
+# ProjekPID - Rice Production Prediction Pipeline
+# Requirements file for all dependencies
+
+# Core Data Science Libraries
+pandas>=2.1.0,<3.0.0
+numpy>=1.24.3,<2.0.0
+scipy>=1.11.2,<2.0.0
+
+# Machine Learning
+scikit-learn>=1.3.0,<2.0.0
+xgboost>=2.0.0,<3.0.0
+
+# Database
+sqlalchemy==2.0.20
+
+# Visualization
+matplotlib>=3.7.3,<4.0.0
+seaborn>=0.12.2,<1.0.0
+plotly>=5.16.1,<6.0.0
+statsmodels>=0.14.0,<1.0.0
+
+# Dashboard
+streamlit>=1.26.0,<2.0.0
+
+# Utilities
+joblib>=1.3.2,<2.0.0
+python-dotenv>=1.0.0,<2.0.0
+pyyaml>=6.0.1,<7.0.0
+
+# Jupyter (optional, for notebooks)
+jupyter>=1.0.0,<2.0.0
+ipykernel>=6.25.1,<7.0.0

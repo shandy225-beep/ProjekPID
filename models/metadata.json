@@ -1,0 +1,6 @@
+{
+  "best_model": "Linear Regression",
+  "target_column": "Produksi",
+  "n_features": 15,
+  "timestamp": "2025-11-22 07:36:18.447413"
+}
