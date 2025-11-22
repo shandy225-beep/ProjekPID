@@ -82,14 +82,22 @@ Thumbs.db
 
 # Project specific
 logs/*.log
-*.pkl
 *.db
 *.sqlite
-data/processed/*
-data/predictions/*
-models/*.pkl
-models/*.png
-!.gitkeep
+
+# Allow essential data files for Streamlit Cloud
+!data/processed/transformed_data.pkl
+!data/processed/transformed_data.csv
+!data/predictions/future_predictions.csv
+!models/evaluation_results.json
+!models/metadata.json
+!models/feature_names.json
+!models/best_model.pkl
+!models/*.png
+
+# But still ignore other pkl files
+*_temp.pkl
+*_backup.pkl
 
 # Streamlit
 .streamlit/
