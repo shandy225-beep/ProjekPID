@@ -40,8 +40,26 @@ st.markdown("""
         border-radius: 0.5rem;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    .stMetric {
-        background-color: #ffffff;
+    /* Fix metric box styling */
+    [data-testid="stMetricValue"] {
+        background-color: #e8f5e9;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        color: #1b5e20 !important;
+        font-size: 1.5rem !important;
+        font-weight: bold;
+    }
+    [data-testid="stMetricLabel"] {
+        color: #2e7d32 !important;
+        font-weight: 600;
+        font-size: 1rem;
+    }
+    [data-testid="stMetricDelta"] {
+        color: #4caf50 !important;
+    }
+    div[data-testid="metric-container"] {
+        background-color: #f1f8f4;
+        border: 1px solid #a5d6a7;
         padding: 1rem;
         border-radius: 0.5rem;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -50,7 +68,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-@st.cache_data
+@st.cache_data(ttl=300)  # Cache 5 minutes, then auto-reload
 def load_data():
     """Load semua data yang diperlukan"""
     try:
@@ -68,12 +86,30 @@ def load_data():
             st.error(f"❌ File tidak ditemukan: {csv_path} atau {pkl_path}")
             return None, None, None, None
         
-        # Load predictions if exists
-        predictions_path = Path("data/predictions/future_predictions.csv")
-        if predictions_path.exists():
-            df_predictions = pd.read_csv(predictions_path)
+        # Load predictions (multi-scenario)
+        predictions = {}
+        scenarios = ['pessimistic', 'realistic', 'optimistic']
+        
+        for scenario in scenarios:
+            pred_path = Path(f"data/predictions/predictions_{scenario}.csv")
+            if pred_path.exists():
+                predictions[scenario] = pd.read_csv(pred_path)
+                st.info(f"✅ Loaded {scenario} scenario: {predictions[scenario].shape[0]} predictions")
+        
+        # Fallback: backward compatible
+        if not predictions:
+            predictions_path = Path("data/predictions/future_predictions.csv")
+            if predictions_path.exists():
+                predictions['realistic'] = pd.read_csv(predictions_path)
+                st.warning("⚠️ Using legacy single-scenario file")
+        
+        df_predictions = predictions if predictions else None
+        
+        # Show what was loaded
+        if predictions:
+            st.success(f"✅ Multi-scenario data loaded: {len(predictions)} scenarios")
         else:
-            df_predictions = None
+            st.error("❌ No prediction data found")
         
         # Load model results
         results_path = Path("models/evaluation_results.json")
@@ -144,13 +180,13 @@ def plot_time_series(df):
         # Gunakan kolom original jika ada
         prod_col = 'Produksi_Original' if 'Produksi_Original' in df.columns else 'Produksi'
         
-        # Create plot
+        # Create plot dengan satuan
         fig = px.line(
             df_filtered,
             x='Tahun',
             y=prod_col,
             color='Provinsi',
-            title='Trend Produksi Padi',
+            title='Trend Produksi Padi (Historis)',
             labels={prod_col: 'Produksi (ton)', 'Tahun': 'Tahun'},
             markers=True
         )
@@ -222,6 +258,14 @@ def plot_scatter_weather(df):
     
     prod_col = 'Produksi_Original' if 'Produksi_Original' in df.columns else 'Produksi'
     
+    # Satuan untuk label
+    satuan_map = {
+        'Curah hujan': 'mm',
+        'Kelembapan': '%',
+        'Suhu rata-rata': '°C'
+    }
+    satuan = satuan_map.get(weather_var, '')
+    
     # Create scatter plot (trendline removed to avoid statsmodels dependency)
     fig = px.scatter(
         df,
@@ -229,7 +273,7 @@ def plot_scatter_weather(df):
         y=prod_col,
         color=color_by,
         title=f'Hubungan {weather_var} dengan Produksi',
-        labels={prod_col: 'Produksi (ton)', weather_var: weather_var},
+        labels={prod_col: 'Produksi (ton)', weather_var: f'{weather_var} ({satuan})'},
         opacity=0.6
     )
     
@@ -364,61 +408,376 @@ def show_model_performance(model_results, metadata):
         st.info("Hasil evaluasi model belum tersedia. Jalankan training model terlebih dahulu.")
 
 
-def show_future_predictions(df_predictions):
-    """Tampilkan prediksi masa depan"""
-    st.header("🔮 Prediksi Produksi Masa Depan")
+def show_future_predictions(df_predictions, df_historical=None):
+    """Tampilkan prediksi masa depan dengan multi-scenario"""
+    st.header("🔮 Prediksi Produksi Masa Depan (Multi-Scenario Forecasting)")
     
-    if df_predictions is not None and len(df_predictions) > 0:
-        # Summary metrics dalam format teks
-        years = sorted(df_predictions['Tahun'].unique())
-        st.markdown(f"""
-        ### Ringkasan Prediksi
+    # Check if predictions is a dict (multi-scenario) or DataFrame (legacy)
+    if df_predictions is None:
+        st.warning("⚠️ Tidak ada data prediksi yang tersedia")
+        return
+    
+    # Handle both dict (multi-scenario) and DataFrame (legacy) formats
+    if isinstance(df_predictions, dict):
+        scenarios = list(df_predictions.keys())
         
-        - **Total Prediksi Produksi:** {df_predictions['Produksi_Prediksi'].sum()/1e6:.2f} juta ton
-        - **Rata-rata per Tahun:** {df_predictions.groupby('Tahun')['Produksi_Prediksi'].sum().mean()/1e6:.2f} juta ton
-        - **Tahun Prediksi:** {years[0]} - {years[-1]}
-        """)
+        st.info(f"📊 Tersedia {len(scenarios)} scenario: {', '.join(scenarios)}")
+        
+        # Scenario selector
+        selected_scenario = st.selectbox(
+            "🎯 Pilih Scenario",
+            scenarios,
+            index=scenarios.index('realistic') if 'realistic' in scenarios else 0,
+            help="Pilih scenario untuk melihat prediksi"
+        )
+        
+        df_pred = df_predictions[selected_scenario]
+    else:
+        # Legacy: single DataFrame
+        df_pred = df_predictions
+        selected_scenario = "realistic"
+        st.info("📊 Mode: Single scenario (realistic)")
+    
+    if df_pred is not None and len(df_pred) > 0:
+        # Summary metrics dengan satuan
+        years = sorted(df_pred['Tahun'].unique())
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric(
+                "Total Produksi",
+                f"{df_pred['Produksi_Prediksi'].sum()/1e6:.2f} juta ton",
+                help=f"Total produksi prediksi untuk scenario {selected_scenario}"
+            )
+        with col2:
+            st.metric(
+                "Rata-rata/Tahun",
+                f"{df_pred.groupby('Tahun')['Produksi_Prediksi'].sum().mean()/1e6:.2f} juta ton",
+                help="Rata-rata produksi per tahun"
+            )
+        with col3:
+            st.metric(
+                "Produktivitas",
+                f"{df_pred['Produktivitas_Prediksi'].mean():.2f} ton/ha",
+                help="Rata-rata produktivitas"
+            )
+        with col4:
+            st.metric(
+                "Tahun Prediksi",
+                f"{years[0]} - {years[-1]}",
+                help="Rentang tahun prediksi"
+            )
         
         st.markdown("---")
         
-        # Time series prediction
-        st.subheader("Trend Prediksi Per Provinsi")
+        # Tabs untuk berbagai visualisasi
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "📈 Produksi", 
+            "🌦️ Cuaca", 
+            "📊 Comparison",
+            "🎯 Scenario Compare",
+            "📋 Data Lengkap"
+        ])
         
-        provinces = sorted(df_predictions['Provinsi'].unique())
-        selected_provinces = st.multiselect(
-            "Pilih Provinsi untuk Prediksi",
-            provinces,
-            default=provinces[:3] if len(provinces) >= 3 else provinces,
-            key="pred_provinces"
-        )
-        
-        if selected_provinces:
-            df_filtered = df_predictions[df_predictions['Provinsi'].isin(selected_provinces)]
+        with tab1:
+            st.subheader("Trend Prediksi Produksi Per Provinsi")
             
-            fig = px.line(
-                df_filtered,
-                x='Tahun',
-                y='Produksi_Prediksi',
-                color='Provinsi',
-                title='Prediksi Produksi Padi',
-                labels={'Produksi_Prediksi': 'Produksi Prediksi (ton)', 'Tahun': 'Tahun'},
-                markers=True
+            provinces = sorted(df_pred['Provinsi'].unique())
+            selected_provinces = st.multiselect(
+                "Pilih Provinsi",
+                provinces,
+                default=provinces[:3] if len(provinces) >= 3 else provinces,
+                key="pred_prod_provinces"
             )
             
-            fig.update_layout(height=500)
-            st.plotly_chart(fig, width='stretch')
+            if selected_provinces:
+                df_filtered = df_pred[df_pred['Provinsi'].isin(selected_provinces)]
+                
+                fig = px.line(
+                    df_filtered,
+                    x='Tahun',
+                    y='Produksi_Prediksi',
+                    color='Provinsi',
+                    title='Prediksi Produksi Padi (ton)',
+                    labels={'Produksi_Prediksi': 'Produksi (ton)', 'Tahun': 'Tahun'},
+                    markers=True
+                )
+                
+                fig.update_layout(height=500)
+                st.plotly_chart(fig, width='stretch')
         
-        # Data table
-        st.subheader("Tabel Prediksi")
-        display_df = df_predictions[['Provinsi', 'Tahun', 'Produksi_Prediksi', 
-                                     'Produktivitas_Prediksi', 'Luas Panen']].copy()
-        display_df['Produksi_Prediksi'] = display_df['Produksi_Prediksi'].round(2)
-        display_df['Produktivitas_Prediksi'] = display_df['Produktivitas_Prediksi'].round(2)
+        with tab2:
+            st.subheader("Prediksi Fitur Cuaca")
+            st.info("💡 Fitur cuaca diprediksi menggunakan time series forecasting (trend + seasonality)")
+            
+            provinces_weather = sorted(df_pred['Provinsi'].unique())
+            selected_prov_weather = st.selectbox(
+                "Pilih Provinsi untuk Analisis Cuaca",
+                provinces_weather,
+                key="weather_prov"
+            )
+            
+            if selected_prov_weather:
+                df_prov = df_pred[df_pred['Provinsi'] == selected_prov_weather]
+                
+                # Create subplot untuk 3 fitur cuaca
+                fig = make_subplots(
+                    rows=3, cols=1,
+                    subplot_titles=(
+                        'Curah Hujan (mm)', 
+                        'Kelembapan (%)', 
+                        'Suhu Rata-rata (°C)'
+                    ),
+                    vertical_spacing=0.1
+                )
+                
+                # Curah Hujan
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_prov['Tahun'],
+                        y=df_prov['Curah hujan'],
+                        mode='lines+markers',
+                        name='Curah Hujan',
+                        line=dict(color='blue')
+                    ),
+                    row=1, col=1
+                )
+                
+                # Kelembapan
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_prov['Tahun'],
+                        y=df_prov['Kelembapan'],
+                        mode='lines+markers',
+                        name='Kelembapan',
+                        line=dict(color='green')
+                    ),
+                    row=2, col=1
+                )
+                
+                # Suhu
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_prov['Tahun'],
+                        y=df_prov['Suhu rata-rata'],
+                        mode='lines+markers',
+                        name='Suhu',
+                        line=dict(color='red')
+                    ),
+                    row=3, col=1
+                )
+                
+                fig.update_xaxes(title_text="Tahun", row=3, col=1)
+                fig.update_yaxes(title_text="mm", row=1, col=1)
+                fig.update_yaxes(title_text="%", row=2, col=1)
+                fig.update_yaxes(title_text="°C", row=3, col=1)
+                
+                fig.update_layout(height=800, showlegend=False)
+                st.plotly_chart(fig, width='stretch')
+                
+                # Weather statistics
+                st.markdown("**Statistik Cuaca Prediksi:**")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric(
+                        "Curah Hujan",
+                        f"{df_prov['Curah hujan'].mean():.1f} mm",
+                        f"±{df_prov['Curah hujan'].std():.1f} mm"
+                    )
+                with col2:
+                    st.metric(
+                        "Kelembapan",
+                        f"{df_prov['Kelembapan'].mean():.1f}%",
+                        f"±{df_prov['Kelembapan'].std():.1f}%"
+                    )
+                with col3:
+                    st.metric(
+                        "Suhu",
+                        f"{df_prov['Suhu rata-rata'].mean():.1f}°C",
+                        f"±{df_prov['Suhu rata-rata'].std():.1f}°C"
+                    )
         
-        st.dataframe(display_df, width='stretch', hide_index=True)
+        with tab3:
+            st.subheader("Comparison: Historis vs Prediksi")
+            
+            if df_historical is not None:
+                provinces_comp = sorted(df_pred['Provinsi'].unique())
+                selected_prov_comp = st.selectbox(
+                    "Pilih Provinsi untuk Comparison",
+                    provinces_comp,
+                    key="comp_prov"
+                )
+                
+                if selected_prov_comp:
+                    # Historical data
+                    df_hist = df_historical[df_historical['Provinsi'] == selected_prov_comp]
+                    # Use original values if available
+                    if 'Produksi_Original' in df_hist.columns:
+                        df_hist = df_hist[['Tahun', 'Produksi_Original']].copy()
+                        df_hist.columns = ['Tahun', 'Produksi']
+                    else:
+                        df_hist = df_hist[['Tahun', 'Produksi']].copy()
+                    
+                    # Prediction data
+                    df_pred_comp = df_pred[df_pred['Provinsi'] == selected_prov_comp][['Tahun', 'Produksi_Prediksi']].copy()
+                    df_pred_comp.columns = ['Tahun', 'Produksi']
+                    
+                    # Combine
+                    df_hist['Type'] = 'Historis'
+                    df_pred_comp['Type'] = f'Prediksi ({selected_scenario})'
+                    df_combined = pd.concat([df_hist, df_pred_comp])
+                    
+                    # Plot
+                    fig = px.line(
+                        df_combined,
+                        x='Tahun',
+                        y='Produksi',
+                        color='Type',
+                        title=f'Historis vs Prediksi - {selected_prov_comp}',
+                        labels={'Produksi': 'Produksi (ton)', 'Tahun': 'Tahun'},
+                        markers=True
+                    )
+                    
+                    # Add vertical line to separate historis and prediksi
+                    last_hist_year = df_hist['Tahun'].max()
+                    fig.add_vline(
+                        x=last_hist_year, 
+                        line_dash="dash", 
+                        line_color="gray",
+                        annotation_text="Data Historis | Prediksi"
+                    )
+                    
+                    fig.update_layout(height=500)
+                    st.plotly_chart(fig, width='stretch')
+                    
+                    # Statistics comparison
+                    st.markdown("**Perbandingan Statistik:**")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown("**Historis:**")
+                        st.write(f"Rata-rata: {df_hist['Produksi'].mean():,.0f} ton")
+                        st.write(f"Std Dev: {df_hist['Produksi'].std():,.0f} ton")
+                        st.write(f"Min: {df_hist['Produksi'].min():,.0f} ton")
+                        st.write(f"Max: {df_hist['Produksi'].max():,.0f} ton")
+                    with col2:
+                        st.markdown(f"**Prediksi ({selected_scenario}):**")
+                        st.write(f"Rata-rata: {df_pred_comp['Produksi'].mean():,.0f} ton")
+                        st.write(f"Std Dev: {df_pred_comp['Produksi'].std():,.0f} ton")
+                        st.write(f"Min: {df_pred_comp['Produksi'].min():,.0f} ton")
+                        st.write(f"Max: {df_pred_comp['Produksi'].max():,.0f} ton")
+            else:
+                st.warning("Data historis tidak tersedia untuk comparison")
+        
+        with tab4:
+            st.subheader("Perbandingan Semua Scenario")
+            
+            # Only show if multi-scenario data available
+            if isinstance(df_predictions, dict) and len(df_predictions) > 1:
+                provinces_scenario = sorted(df_pred['Provinsi'].unique())
+                selected_prov_scenario = st.selectbox(
+                    "Pilih Provinsi untuk Perbandingan Scenario",
+                    provinces_scenario,
+                    key="scenario_prov"
+                )
+                
+                if selected_prov_scenario:
+                    # Collect data from all scenarios
+                    scenario_data = []
+                    for scenario, df_scenario in df_predictions.items():
+                        df_temp = df_scenario[df_scenario['Provinsi'] == selected_prov_scenario][['Tahun', 'Produksi_Prediksi']].copy()
+                        df_temp['Scenario'] = scenario
+                        scenario_data.append(df_temp)
+                    
+                    df_all_scenarios = pd.concat(scenario_data, ignore_index=True)
+                    
+                    # Plot comparison
+                    fig = px.line(
+                        df_all_scenarios,
+                        x='Tahun',
+                        y='Produksi_Prediksi',
+                        color='Scenario',
+                        title=f'Perbandingan Scenario - {selected_prov_scenario}',
+                        labels={'Produksi_Prediksi': 'Produksi (ton)', 'Tahun': 'Tahun'},
+                        markers=True,
+                        color_discrete_map={
+                            'pessimistic': '#d32f2f',
+                            'realistic': '#1976d2',
+                            'optimistic': '#388e3c'
+                        }
+                    )
+                    
+                    fig.update_layout(height=500)
+                    st.plotly_chart(fig, width='stretch')
+                    
+                    # Summary statistics per scenario
+                    st.markdown("**Statistik Per Scenario:**")
+                    stats_cols = st.columns(len(df_predictions))
+                    
+                    for i, (scenario, df_scenario) in enumerate(df_predictions.items()):
+                        df_s = df_scenario[df_scenario['Provinsi'] == selected_prov_scenario]
+                        with stats_cols[i]:
+                            st.markdown(f"**{scenario.capitalize()}**")
+                            st.metric(
+                                "Total Produksi",
+                                f"{df_s['Produksi_Prediksi'].sum()/1e3:.1f}K ton"
+                            )
+                            st.metric(
+                                "Pertumbuhan",
+                                f"{((df_s['Produksi_Prediksi'].iloc[-1] / df_s['Produksi_Prediksi'].iloc[0]) - 1) * 100:.1f}%"
+                            )
+            else:
+                st.info("📊 Multi-scenario data tidak tersedia. Hanya ada single scenario.")
+        
+        with tab5:
+            st.subheader(f"Tabel Prediksi Lengkap - {selected_scenario.capitalize()}")
+            
+            # Select columns that exist
+            cols = ['Provinsi', 'Tahun', 'Produksi_Prediksi', 'Produktivitas_Prediksi', 
+                    'Luas Panen', 'Curah hujan', 'Kelembapan', 'Suhu rata-rata']
+            
+            # Add Scenario column if exists
+            if 'Scenario' in df_pred.columns:
+                cols.insert(2, 'Scenario')
+            
+            display_df = df_pred[cols].copy()
+            
+            # Rename dengan satuan
+            rename_dict = {
+                'Provinsi': 'Provinsi',
+                'Tahun': 'Tahun',
+                'Produksi_Prediksi': 'Produksi (ton)',
+                'Produktivitas_Prediksi': 'Produktivitas (ton/ha)',
+                'Luas Panen': 'Luas Panen (ha)',
+                'Curah hujan': 'Curah Hujan (mm)',
+                'Kelembapan': 'Kelembapan (%)',
+                'Suhu rata-rata': 'Suhu (°C)'
+            }
+            if 'Scenario' in display_df.columns:
+                rename_dict['Scenario'] = 'Scenario'
+            
+            display_df = display_df.rename(columns=rename_dict)
+            
+            # Round numbers
+            display_df['Produksi (ton)'] = display_df['Produksi (ton)'].round(2)
+            display_df['Produktivitas (ton/ha)'] = display_df['Produktivitas (ton/ha)'].round(2)
+            display_df['Luas Panen (ha)'] = display_df['Luas Panen (ha)'].round(2)
+            display_df['Curah Hujan (mm)'] = display_df['Curah Hujan (mm)'].round(1)
+            display_df['Kelembapan (%)'] = display_df['Kelembapan (%)'].round(1)
+            display_df['Suhu (°C)'] = display_df['Suhu (°C)'].round(1)
+            
+            st.dataframe(display_df, width='stretch', hide_index=True)
+            
+            # Download button
+            csv = display_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label=f"📥 Download CSV ({selected_scenario})",
+                data=csv,
+                file_name=f"prediksi_padi_sumatera_{selected_scenario}.csv",
+                mime="text/csv"
+            )
         
     else:
-        st.info("Prediksi belum tersedia. Jalankan script predict.py terlebih dahulu.")
+        st.info("⚠️ Prediksi belum tersedia. Jalankan script predict.py terlebih dahulu.")
 
 
 def plot_geographic_map(df):
@@ -499,6 +858,22 @@ def main():
         st.cache_data.clear()
         st.rerun()
     
+    # Debug info in sidebar
+    with st.sidebar.expander("🔍 Debug Info"):
+        st.write(f"**Data Shape:** {df.shape}")
+        if df_predictions:
+            if isinstance(df_predictions, dict):
+                st.write(f"**Predictions Type:** Multi-scenario")
+                st.write(f"**Scenarios:** {list(df_predictions.keys())}")
+                for scenario, pred_df in df_predictions.items():
+                    st.write(f"  - {scenario}: {pred_df.shape[0]} rows")
+            else:
+                st.write(f"**Predictions Type:** Single scenario")
+                st.write(f"**Predictions Shape:** {df_predictions.shape}")
+        else:
+            st.write("**Predictions:** None")
+        st.rerun()
+    
     st.sidebar.info(
         """
         **Tentang Dashboard:**
@@ -551,7 +926,7 @@ def main():
         plot_prediction_vs_actual()
     
     elif page == "🔮 Future Predictions":
-        show_future_predictions(df_predictions)
+        show_future_predictions(df_predictions, df)
 
 
 if __name__ == "__main__":
