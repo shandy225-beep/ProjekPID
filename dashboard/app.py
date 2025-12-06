@@ -68,7 +68,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-@st.cache_data(ttl=300)  # Cache 5 minutes, then auto-reload
+@st.cache_data
 def load_data():
     """Load semua data yang diperlukan"""
     try:
@@ -78,10 +78,8 @@ def load_data():
         
         if csv_path.exists():
             df_transformed = pd.read_csv(str(csv_path))
-            st.success(f"✅ Data berhasil dimuat: {df_transformed.shape[0]} baris, {df_transformed.shape[1]} kolom")
         elif pkl_path.exists():
             df_transformed = pd.read_pickle(str(pkl_path))
-            st.success(f"✅ Data berhasil dimuat: {df_transformed.shape[0]} baris, {df_transformed.shape[1]} kolom")
         else:
             st.error(f"❌ File tidak ditemukan: {csv_path} atau {pkl_path}")
             return None, None, None, None
@@ -94,22 +92,14 @@ def load_data():
             pred_path = Path(f"data/predictions/predictions_{scenario}.csv")
             if pred_path.exists():
                 predictions[scenario] = pd.read_csv(pred_path)
-                st.info(f"✅ Loaded {scenario} scenario: {predictions[scenario].shape[0]} predictions")
         
         # Fallback: backward compatible
         if not predictions:
             predictions_path = Path("data/predictions/future_predictions.csv")
             if predictions_path.exists():
                 predictions['realistic'] = pd.read_csv(predictions_path)
-                st.warning("⚠️ Using legacy single-scenario file")
         
         df_predictions = predictions if predictions else None
-        
-        # Show what was loaded
-        if predictions:
-            st.success(f"✅ Multi-scenario data loaded: {len(predictions)} scenarios")
-        else:
-            st.error("❌ No prediction data found")
         
         # Load model results
         results_path = Path("models/evaluation_results.json")
@@ -852,27 +842,6 @@ def main():
     )
     
     st.sidebar.markdown("---")
-    
-    # Add clear cache button
-    if st.sidebar.button("🔄 Clear Cache & Reload Data"):
-        st.cache_data.clear()
-        st.rerun()
-    
-    # Debug info in sidebar
-    with st.sidebar.expander("🔍 Debug Info"):
-        st.write(f"**Data Shape:** {df.shape}")
-        if df_predictions:
-            if isinstance(df_predictions, dict):
-                st.write(f"**Predictions Type:** Multi-scenario")
-                st.write(f"**Scenarios:** {list(df_predictions.keys())}")
-                for scenario, pred_df in df_predictions.items():
-                    st.write(f"  - {scenario}: {pred_df.shape[0]} rows")
-            else:
-                st.write(f"**Predictions Type:** Single scenario")
-                st.write(f"**Predictions Shape:** {df_predictions.shape}")
-        else:
-            st.write("**Predictions:** None")
-        st.rerun()
     
     st.sidebar.info(
         """
